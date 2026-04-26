@@ -597,19 +597,19 @@ let agentRunning = false;
 let agentStep = 0;
 const MAX_AGENT_STEPS = 30;
 
-async function agentDelay(ms) {
+function agentDelay(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function getScreenContext() {
+function getScreenContext() {
   if (!B) return 'no accessibility';
   try {
     const ui = JSON.parse(B.scanUI());
     if (ui.error) return 'screen unavailable';
-    const btns = ui.buttons.slice(0, 15).map(b => `[${b.index}]"${b.text}"@(${b.x},${b.y})`).join(' ');
-    const inps = ui.inputs.slice(0, 10).map(i => `[${i.index}]INPUT:"${i.text}"@(${i.x},${i.y})`).join(' ');
-    return `SCREEN_STATE: buttons=${btns || 'none'} inputs=${inps || 'none'}`;
-  } catch(e) { return 'screen read failed'; }
+    const btns = (ui.buttons || []).slice(0, 15).map(b => '[' + b.index + ']"' + b.text + '"@(' + b.x + ',' + b.y + ')').join(' ');
+    const inps = (ui.inputs || []).slice(0, 10).map(i => '[' + i.index + ']INPUT:"' + i.text + '"@(' + i.x + ',' + i.y + ')').join(' ');
+    return 'SCREEN: btns=' + (btns || 'none') + ' inputs=' + (inps || 'none');
+  } catch(e) { return 'screen unavailable'; }
 }
 
 async function process(text) {
@@ -618,61 +618,71 @@ async function process(text) {
   agentRunning = true;
   agentStep = 0;
   addMsg(text, 'you');
-  const sb = document.getElementById('stopbtn');
-  if (sb) sb.style.display = 'inline-block';
+
+  try {
+    const sb = document.getElementById('stopbtn');
+    if (sb) sb.style.display = 'inline-block';
+  } catch(e) {}
 
   let userInput = text;
 
-  while (agentRunning && agentStep < MAX_AGENT_STEPS) {
-    agentStep++;
+  try {
+    while (agentRunning && agentStep < MAX_AGENT_STEPS) {
+      agentStep++;
 
-    const resp = await askAI(userInput);
-    if (!resp) break;
+      const resp = await askAI(userInput);
+      if (!resp) break;
 
-    const isDone = resp.done !== false; // default true unless explicitly false
+      const isDone = (resp.done !== false);
 
-    // Show plan on first step
-    if (resp.plan && agentStep === 1) {
-      const planText = resp.plan.map((s,i) => `${i+1}. ${s}`).join('\n');
-      addMsg('📋 Plan:\n' + planText, 'aria', 'plan');
+      // Show plan once
+      if (resp.plan && Array.isArray(resp.plan) && agentStep === 1) {
+        const planText = resp.plan.map(function(s,i){ return (i+1)+'. '+s; }).join(' | ');
+        addMsg('Plan: ' + planText, 'aria', '', null, null);
+      }
+
+      // Execute action
+      let actionOutput = null;
+      if (resp.action && resp.action !== 'null' && resp.action !== null) {
+        try {
+          const result = handleAction(resp.action, resp.params || {});
+          if (result && typeof result.then === 'function') {
+            actionOutput = await result;
+          } else {
+            actionOutput = result;
+          }
+        } catch(ae) { actionOutput = 'action error: ' + ae.message; }
+      }
+
+      addMsg(resp.speech || '...', 'aria', '', resp.action || null, actionOutput);
+
+      if (agentStep === 1 || isDone || agentStep % 4 === 0) {
+        speak(resp.speech || '');
+        await agentDelay(1500);
+      } else {
+        await agentDelay(900);
+      }
+
+      if (isDone) break;
+
+      await agentDelay(500);
+      const screenCtx = getScreenContext();
+      userInput = 'Step ' + agentStep + ' done. Action=' + resp.action + '. ' + screenCtx + '. Continue task.';
     }
 
-    // Execute action
-    let actionOutput = null;
-    if (resp.action && resp.action !== 'null') {
-      const result = handleAction(resp.action, resp.params || {});
-      // If result is a promise (wait action), await it
-      actionOutput = (result && typeof result.then === 'function') ? await result : result;
+    if (agentStep >= MAX_AGENT_STEPS) {
+      addMsg('Reached step limit. Task stopped.', 'aria', '', null, null);
     }
-
-    // Show message
-    const stepLabel = !isDone ? `Step ${agentStep}` : '';
-    addMsg(resp.speech, 'aria', stepLabel, resp.action, actionOutput);
-
-    // Speak only key steps (first, last, or every 3rd)
-    if (agentStep === 1 || isDone || agentStep % 3 === 0) {
-      speak(resp.speech);
-      await agentDelay(1800); // wait for TTS + action to settle
-    } else {
-      await agentDelay(1200); // shorter delay between steps
-    }
-
-    if (isDone) break;
-
-    // Get screen state and feed back to AI for next step
-    await agentDelay(600); // let UI settle after action
-    const screenCtx = await getScreenContext();
-    userInput = `[Step ${agentStep} complete. Action was: ${resp.action}. Result: ${actionOutput || 'done'}. ${screenCtx}. Continue task.]`;
-  }
-
-  if (agentStep >= MAX_AGENT_STEPS) {
-    addMsg('Task limit reached. Stopping.', 'aria', '');
+  } catch(loopErr) {
+    addMsg('Agent error: ' + loopErr.message, 'aria', '', null, null);
   }
 
   agentRunning = false;
   busy = false;
-  const sb = document.getElementById('stopbtn');
-  if (sb) sb.style.display = 'none';
+  try {
+    const sb = document.getElementById('stopbtn');
+    if (sb) sb.style.display = 'none';
+  } catch(e) {}
 }
 
 // ── TTS ──────────────────────────────────────────────────────────────────────
