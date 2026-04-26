@@ -338,6 +338,7 @@ body::before {
 
   <!-- INPUT BAR -->
   <div id="bar">
+    <button id="stopbtn" onclick="agentRunning=false;busy=false;addMsg('Task stopped.','aria','');" style="display:none;background:#c0392b;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:bold;cursor:pointer;margin-right:6px;">⛔ STOP</button>
     <input id="tinput" placeholder="Type to ARIA..." />
     <button id="micbtn" ontouchstart="startMic()" ontouchend="stopMic()">🎤</button>
     <button id="touchToggle" onclick="toggleTouchPanel()" title="Touch Controls">✋</button>
@@ -389,13 +390,23 @@ let vizTimer = null;
 
 const WAKE_WORDS = ['hey aria','hey area','hey arya','hey ava','hey ari','aria','hey harry','hey avia','avia','hey naria','hey alria','hey ahria','hey arria','hey ar','arria','hey ara','hey aria.','hey areya','hey area','hey areia','hey iria','hey lyria'];
 
-const SYSTEM_PROMPT = () => `You are ${ARIA_NAME}, an AI voice assistant running as a native Android app with full UI control.
-Respond ONLY in JSON: {"speech": "...", "action": "..." or null, "params": {} or null}
+const SYSTEM_PROMPT = () => `You are ${ARIA_NAME}, an AI assistant running as a native Android app with full UI control and the ability to complete multi-step tasks autonomously.
 
-"speech" = what you say out loud.
-"action" = one of these action keys, or null:
+Respond ONLY in JSON — no text outside the JSON object ever.
 
-  // Device controls
+SINGLE ACTION MODE (conversation or one-step tasks):
+{"speech": "...", "action": "action_key", "params": {}, "done": true}
+
+AGENTIC TASK MODE (multi-step tasks like creating accounts, filling forms, navigating apps):
+{"speech": "...", "action": "action_key", "params": {}, "done": false, "plan": ["step1","step2",...], "step": 1}
+
+Set "done": false to continue the agent loop. Set "done": true when the task is fully complete or you need user input.
+After each action, you will receive the screen state so you can decide the next step.
+Always scan_ui or read_screen after navigating to a new page before acting on it.
+
+AVAILABLE ACTIONS:
+
+  // Device
   torch_on, torch_off, torch_toggle
   battery_info
   open_url (params: {"url":"..."})
@@ -407,7 +418,7 @@ Respond ONLY in JSON: {"speech": "...", "action": "..." or null, "params": {} or
   device_info
   vibrate (params: {"ms": 300})
 
-  // UI navigation (requires Accessibility permission)
+  // UI Navigation (requires Accessibility)
   tap (params: {"x": 540, "y": 960})
   long_press (params: {"x": 540, "y": 960})
   swipe (params: {"x1":540,"y1":1400,"x2":540,"y2":400,"duration":300})
@@ -418,20 +429,34 @@ Respond ONLY in JSON: {"speech": "...", "action": "..." or null, "params": {} or
   press_recents
   open_notifications
   open_quick_settings
-  tap_by_text (params: {"text":"Settings"})
-  type_text (params: {"text":"hello world"})
-  read_screen
-  scan_ui — scans screen and returns all buttons/inputs with index numbers and (x,y) positions
-  find_element (params: {"query":"email"}) — finds a button or field by label/hint text
-  fill_field (params: {"field":"Email","value":"user@example.com"}) — taps a field and types into it
-  tap_by_index (params: {"index":3}) — taps element by its index from scan_ui
 
-To fill a form: first use scan_ui or find_element to locate fields, then use fill_field for each one.
-Example: fill_field {"field":"First name","value":"John"} then fill_field {"field":"Last name","value":"Doe"}
+  // Smart UI interaction
+  tap_by_text (params: {"text":"Next"})
+  type_text (params: {"text":"hello"})
+  read_screen — read all visible text
+  scan_ui — get all buttons+inputs with index, text, x, y
+  find_element (params: {"query":"email"}) — find element by label/hint
+  fill_field (params: {"field":"First name","value":"John"}) — tap field + type value
+  tap_by_index (params: {"index":3}) — tap element by index from scan_ui
+  wait (params: {"ms": 1500}) — wait for page to load
 
-For conversation with no action: {"speech": "...", "action": null, "params": null}
+AGENTIC TASK GUIDELINES:
+- For any multi-step task (create account, fill form, send message, install app):
+  1. Set done:false and include a plan array listing all steps
+  2. Execute ONE action per response
+  3. After actions that navigate (open_url, tap, tap_by_text), always follow with scan_ui or read_screen next turn
+  4. For forms: scan_ui first, then fill each field one at a time using fill_field
+  5. Generate realistic random data when asked (names, passwords, etc.) — make them up, don't ask user
+  6. If a step fails or element not found, try an alternative (scroll, try different label, tap by coords)
+  7. Set done:true only when task is fully complete
 
-Keep speech natural and concise. Never include text outside the JSON object.`;
+RANDOM DATA EXAMPLES (use these patterns when generating credentials):
+- Names: Alex Johnson, Sam Rivera, Jordan Lee, Casey Morgan, Taylor Brooks
+- Passwords: combine 2 words + 2 numbers + symbol e.g. "BlueSky47!" "RiverMoon23#"
+- Birthdays: use ages 20-35, random months/days
+- Phone: make up a realistic number if needed
+
+Keep speech short and action-focused. Say what you're doing, not what you plan to do.`;
 
 // ── HISTORY MANAGEMENT ──────────────────────────────────────────────────────
 function trimHistory() {
@@ -558,6 +583,8 @@ function handleAction(action, params) {
       case 'tap_by_index':
         B.tapByIndex(parseInt(params.index) || 0);
         return `Tapping element #${params.index}`;
+      case 'wait':
+        return new Promise(r => setTimeout(() => r(`Waited ${params.ms||1000}ms`), params.ms||1000));
 
       default: return null;
     }
@@ -565,16 +592,87 @@ function handleAction(action, params) {
 }
 
 // ── PROCESS INPUT ────────────────────────────────────────────────────────────
+// ── AGENT LOOP ──────────────────────────────────────────────────────────────
+let agentRunning = false;
+let agentStep = 0;
+const MAX_AGENT_STEPS = 30;
+
+async function agentDelay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function getScreenContext() {
+  if (!B) return 'no accessibility';
+  try {
+    const ui = JSON.parse(B.scanUI());
+    if (ui.error) return 'screen unavailable';
+    const btns = ui.buttons.slice(0, 15).map(b => `[${b.index}]"${b.text}"@(${b.x},${b.y})`).join(' ');
+    const inps = ui.inputs.slice(0, 10).map(i => `[${i.index}]INPUT:"${i.text}"@(${i.x},${i.y})`).join(' ');
+    return `SCREEN_STATE: buttons=${btns || 'none'} inputs=${inps || 'none'}`;
+  } catch(e) { return 'screen read failed'; }
+}
+
 async function process(text) {
   if (busy) return;
   busy = true;
+  agentRunning = true;
+  agentStep = 0;
   addMsg(text, 'you');
+  const sb = document.getElementById('stopbtn');
+  if (sb) sb.style.display = 'inline-block';
 
-  const resp   = await askAI(text);
-  const output = handleAction(resp.action, resp.params || {});
-  addMsg(resp.speech, 'aria', '', resp.action, output);
-  speak(resp.speech);
+  let userInput = text;
+
+  while (agentRunning && agentStep < MAX_AGENT_STEPS) {
+    agentStep++;
+
+    const resp = await askAI(userInput);
+    if (!resp) break;
+
+    const isDone = resp.done !== false; // default true unless explicitly false
+
+    // Show plan on first step
+    if (resp.plan && agentStep === 1) {
+      const planText = resp.plan.map((s,i) => `${i+1}. ${s}`).join('\n');
+      addMsg('📋 Plan:\n' + planText, 'aria', 'plan');
+    }
+
+    // Execute action
+    let actionOutput = null;
+    if (resp.action && resp.action !== 'null') {
+      const result = handleAction(resp.action, resp.params || {});
+      // If result is a promise (wait action), await it
+      actionOutput = (result && typeof result.then === 'function') ? await result : result;
+    }
+
+    // Show message
+    const stepLabel = !isDone ? `Step ${agentStep}` : '';
+    addMsg(resp.speech, 'aria', stepLabel, resp.action, actionOutput);
+
+    // Speak only key steps (first, last, or every 3rd)
+    if (agentStep === 1 || isDone || agentStep % 3 === 0) {
+      speak(resp.speech);
+      await agentDelay(1800); // wait for TTS + action to settle
+    } else {
+      await agentDelay(1200); // shorter delay between steps
+    }
+
+    if (isDone) break;
+
+    // Get screen state and feed back to AI for next step
+    await agentDelay(600); // let UI settle after action
+    const screenCtx = await getScreenContext();
+    userInput = `[Step ${agentStep} complete. Action was: ${resp.action}. Result: ${actionOutput || 'done'}. ${screenCtx}. Continue task.]`;
+  }
+
+  if (agentStep >= MAX_AGENT_STEPS) {
+    addMsg('Task limit reached. Stopping.', 'aria', '');
+  }
+
+  agentRunning = false;
   busy = false;
+  const sb = document.getElementById('stopbtn');
+  if (sb) sb.style.display = 'none';
 }
 
 // ── TTS ──────────────────────────────────────────────────────────────────────
