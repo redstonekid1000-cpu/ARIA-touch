@@ -31,17 +31,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
-
-      - name: Generate Gradle Wrapper JAR if missing
+      - name: Setup Gradle wrapper
         run: |
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Generating gradle-wrapper.jar..."
-            gradle wrapper --gradle-version 8.4
-          fi
+          mkdir -p gradle/wrapper
+          curl -fL "https://services.gradle.org/distributions/gradle-8.4-bin.zip" -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
+          /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version 8.4 --project-dir .
           chmod +x ./gradlew
 
       - name: Build Debug APK
