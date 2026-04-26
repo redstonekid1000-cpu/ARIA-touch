@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ARIA</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:     #080c14;
+  --bg2:    #0d1420;
+  --bg3:    #111927;
+  --border: #1a2535;
+  --accent: #00d4ff;
+  --a2:     #7b5ea7;
+  --a3:     #ff4b6e;
+  --text:   #c8dce8;
+  --dim:    #3a5060;
+  --bright: #e8f4ff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Exo 2', sans-serif;
+  overflow: hidden;
+  position: fixed;
+  user-select: none;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.013) 2px, rgba(0,212,255,0.013) 4px);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── APP ── */
+#app { display: flex; flex-direction: column; height: 100%; width: 100%; }
+
+/* ── HEADER ── */
+#header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: env(safe-area-inset-top, 40px) 16px 12px;
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+}
+#header::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
+}
+
+#logo {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08);
+  position: relative; flex-shrink: 0;
+  animation: rotateBorder 10s linear infinite;
+}
+#logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 18px; color: var(--accent); letter-spacing: -1px; }
+
+@keyframes rotateBorder {
+  0%   { box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08), 2px 0 8px rgba(0,212,255,0.4); }
+  25%  { box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08), 0 2px 8px rgba(0,212,255,0.4); }
+  50%  { box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08), -2px 0 8px rgba(0,212,255,0.4); }
+  75%  { box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08), 0 -2px 8px rgba(0,212,255,0.4); }
+  100% { box-shadow: 0 0 18px rgba(0,212,255,0.25), inset 0 0 12px rgba(0,212,255,0.08), 2px 0 8px rgba(0,212,255,0.4); }
+}
+
+#hinfo { flex: 1; min-width: 0; }
+#hname { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 20px; color: var(--bright); letter-spacing: 4px; }
+#hsub  { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-top: 1px; }
+
+#spill {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(0,212,255,0.06);
+  border: 1px solid rgba(0,212,255,0.15);
+  border-radius: 20px; padding: 4px 10px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--accent);
+  flex-shrink: 0;
+}
+#sdot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 5px var(--accent);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+#sdot.think  { background: #ffd700; box-shadow: 0 0 6px #ffd700; animation: blink .7s infinite; }
+#sdot.speak  { background: var(--a2);  box-shadow: 0 0 6px var(--a2);  animation: blink .5s infinite; }
+#sdot.listen { background: var(--a3);  box-shadow: 0 0 6px var(--a3);  animation: blink .35s infinite; }
+#sdot.wake   { background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: blink 1.2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+/* ── WAKE BAR ── */
+#wakebar {
+  background: var(--bg3); border-bottom: 1px solid var(--border);
+  padding: 7px 16px; display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+#wakelabel { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--dim); flex: 1; letter-spacing: 1px; }
+#waketoggle {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--dim); border-radius: 12px; padding: 4px 12px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; cursor: pointer;
+  transition: all .2s; letter-spacing: .5px;
+}
+#waketoggle.on { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.06); }
+
+/* ── CHAT ── */
+#chat {
+  flex: 1; overflow-y: auto; padding: 14px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+#chat::-webkit-scrollbar { width: 2px; }
+#chat::-webkit-scrollbar-thumb { background: var(--border); }
+
+.row { display: flex; animation: rise .22s ease-out; }
+@keyframes rise { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.row.you { justify-content: flex-end; }
+.row.aria { justify-content: flex-start; }
+
+.bub {
+  max-width: 80%; padding: 10px 13px;
+  border-radius: 3px; font-size: 14px; line-height: 1.5;
+  position: relative; word-break: break-word;
+}
+.row.you .bub {
+  background: linear-gradient(135deg, rgba(0,212,255,0.13), rgba(0,212,255,0.06));
+  border: 1px solid rgba(0,212,255,0.22); color: var(--bright);
+}
+.row.aria .bub { background: var(--bg3); border: 1px solid var(--border); color: var(--text); }
+.bub.interim { opacity: .4; font-style: italic; border-style: dashed !important; }
+
+.cmd {
+  display: inline-block; margin-top: 6px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px;
+  color: var(--a2); background: rgba(123,94,167,0.1);
+  border: 1px solid rgba(123,94,167,0.2); border-radius: 3px; padding: 2px 7px;
+  word-break: break-all;
+}
+.out { display: block; margin-top: 3px; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--dim); word-break: break-all; }
+
+/* ── VISUALIZER ── */
+#viz {
+  flex-shrink: 0; height: 36px;
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 0 20px; opacity: 0; transition: opacity .3s;
+}
+#viz.on { opacity: 1; }
+.vb { width: 3px; background: var(--accent); border-radius: 2px; min-height: 3px; box-shadow: 0 0 3px var(--accent); }
+
+/* ── INPUT BAR ── */
+#bar {
+  background: var(--bg2); border-top: 1px solid var(--border);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  position: relative;
+}
+#bar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: .35;
+}
+
+#tinput {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 14px; color: var(--bright);
+  font-family: 'Exo 2', sans-serif; font-size: 14px; outline: none;
+  transition: border-color .2s;
+}
+#tinput:focus { border-color: rgba(0,212,255,0.4); }
+#tinput::placeholder { color: var(--dim); }
+
+#micbtn {
+  width: 46px; height: 46px; border-radius: 4px;
+  border: 1px solid rgba(0,212,255,0.35);
+  background: rgba(0,212,255,0.08);
+  color: var(--accent); font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+#micbtn:active, #micbtn.on {
+  background: rgba(255,75,110,0.15);
+  border-color: var(--a3); color: var(--a3);
+  box-shadow: 0 0 14px rgba(255,75,110,0.25);
+}
+
+/* ── TOUCH CONTROL PANEL ── */
+#touchPanel {
+  background: var(--bg2); border-top: 1px solid var(--border);
+  padding: 10px 12px; flex-shrink: 0;
+  display: none;
+}
+#touchPanel.open { display: block; }
+#touchPanel .tp-title {
+  font-family: 'Share Tech Mono', monospace; font-size: 10px;
+  color: var(--dim); letter-spacing: 2px; margin-bottom: 8px;
+}
+#touchGrid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+}
+.tb {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 4px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px;
+  color: var(--dim); text-align: center; cursor: pointer;
+  transition: all .15s; line-height: 1.4;
+}
+.tb:active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); }
+.tb .ti { font-size: 16px; display: block; margin-bottom: 2px; }
+#touchToggle {
+  width: 36px; height: 36px; border-radius: 4px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--dim); font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all .2s;
+}
+#touchToggle.on { border-color: var(--accent); color: var(--accent); }
+
+/* accessibility warning banner */
+#a11yBanner {
+  background: rgba(255,75,110,0.1); border-bottom: 1px solid rgba(255,75,110,0.3);
+  padding: 8px 16px; display: none; align-items: center; gap: 10px; flex-shrink: 0;
+}
+#a11yBanner.show { display: flex; }
+#a11yBanner span { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--a3); flex: 1; }
+#a11yBanner button {
+  background: rgba(255,75,110,0.15); border: 1px solid rgba(255,75,110,0.4);
+  color: var(--a3); border-radius: 4px; padding: 4px 10px;
+  font-family: 'Share Tech Mono', monospace; font-size: 10px; cursor: pointer;
+}
+
+#settingsBtn {
+  width: 36px; height: 36px; border-radius: 4px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--dim); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all .2s;
+}
+#settingsBtn:active { color: var(--accent); border-color: var(--accent); }
+
+#modal {
+  display: none; position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.7); align-items: flex-end;
+}
+#modal.open { display: flex; }
+#modalBox {
+  width: 100%; background: var(--bg2);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: slideUp .25s ease-out;
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+#modalBox h2 { font-family: 'Rajdhani', sans-serif; letter-spacing: 3px; color: var(--bright); margin-bottom: 16px; font-size: 16px; }
+
+.setting-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.setting-row label { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+.setting-row input, .setting-row select {
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); border-radius: 4px; padding: 9px 12px;
+  font-family: 'Exo 2', sans-serif; font-size: 13px; outline: none; width: 100%;
+}
+.setting-row input:focus, .setting-row select:focus { border-color: rgba(0,212,255,0.4); }
+
+#saveBtn {
+  width: 100%; background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.35);
+  color: var(--accent); border-radius: 4px; padding: 12px;
+  font-family: 'Rajdhani', sans-serif; font-size: 16px; letter-spacing: 2px;
+  cursor: pointer; transition: all .2s;
+}
+#saveBtn:active { background: rgba(0,212,255,0.2); }
+#closeModal { float: right; background: transparent; border: none; color: var(--dim); font-size: 22px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div id="logo"><span>AR</span></div>
+    <div id="hinfo">
+      <div id="hname">A R I A</div>
+      <div id="hsub" id="hsub">AI ASSISTANT // READY</div>
+    </div>
+    <div id="spill"><div id="sdot"></div><span id="stxt">READY</span></div>
+  </div>
+
+  <!-- WAKE BAR -->
+  <div id="wakebar">
+    <span id="wakelabel">SAY "HEY ARIA" TO ACTIVATE</span>
+    <button id="waketoggle" onclick="toggleWake()">ENABLE WAKE</button>
+  </div>
+
+  <!-- ACCESSIBILITY WARNING BANNER -->
+  <div id="a11yBanner">
+    <span>⚠ ACCESSIBILITY OFF — touch control disabled</span>
+    <button onclick="AndroidBridge && AndroidBridge.openAccessibilitySettings()">ENABLE</button>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat"></div>
+
+  <!-- VISUALIZER -->
+  <div id="viz">
+    <div class="vb" id="v0"></div><div class="vb" id="v1"></div>
+    <div class="vb" id="v2"></div><div class="vb" id="v3"></div>
+    <div class="vb" id="v4"></div><div class="vb" id="v5"></div>
+    <div class="vb" id="v6"></div><div class="vb" id="v7"></div>
+    <div class="vb" id="v8"></div><div class="vb" id="v9"></div>
+    <div class="vb" id="v10"></div><div class="vb" id="v11"></div>
+    <div class="vb" id="v12"></div><div class="vb" id="v13"></div>
+    <div class="vb" id="v14"></div>
+  </div>
+
+  <!-- TOUCH CONTROL PANEL -->
+  <div id="touchPanel">
+    <div class="tp-title">⚡ TOUCH CONTROL</div>
+    <div id="touchGrid">
+      <div class="tb" onclick="doTouch('press_home')"><span class="ti">⬤</span>HOME</div>
+      <div class="tb" onclick="doTouch('press_back')"><span class="ti">◀</span>BACK</div>
+      <div class="tb" onclick="doTouch('press_recents')"><span class="ti">▣</span>RECENTS</div>
+      <div class="tb" onclick="doTouch('open_notifications')"><span class="ti">🔔</span>NOTIFS</div>
+      <div class="tb" onclick="doTouch('scroll_up')"><span class="ti">↑</span>SCROLL UP</div>
+      <div class="tb" onclick="doTouch('scroll_down')"><span class="ti">↓</span>SCROLL DN</div>
+      <div class="tb" onclick="doTouch('open_quick_settings')"><span class="ti">⚙</span>QUICK SET</div>
+      <div class="tb" onclick="doTouch('read_screen')"><span class="ti">👁</span>READ SCR</div>
+    </div>
+  </div>
+
+  <!-- INPUT BAR -->
+  <div id="bar">
+    <input id="tinput" placeholder="Type to ARIA..." />
+    <button id="micbtn" ontouchstart="startMic()" ontouchend="stopMic()">🎤</button>
+    <button id="touchToggle" onclick="toggleTouchPanel()" title="Touch Controls">✋</button>
+    <button id="settingsBtn" onclick="openSettings()">⚙️</button>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="modal" onclick="closeSettings(event)">
+  <div id="modalBox">
+    <button id="closeModal" onclick="closeSettings()">✕</button>
+    <h2>⚙ SETTINGS</h2>
+    <div class="setting-row">
+      <label>OPENROUTER API KEY</label>
+      <input id="cfgKey" type="password" placeholder="sk-or-v1-..." />
+    </div>
+    <div class="setting-row">
+      <label>MODEL</label>
+      <select id="cfgModel">
+        <option value="nvidia/nemotron-super-49b-v1:free">nvidia/nemotron-super-49b (free)</option>
+        <option value="nvidia/nemotron-3-super-120b-a12b:free">nvidia/nemotron-120b (free)</option>
+        <option value="mistralai/mistral-7b-instruct:free">mistral-7b (free)</option>
+        <option value="meta-llama/llama-3.1-8b-instruct:free">llama-3.1-8b (free)</option>
+        <option value="google/gemma-3-27b-it:free">gemma-3-27b (free)</option>
+        <option value="openai/gpt-4o-mini">gpt-4o-mini</option>
+        <option value="anthropic/claude-3-haiku">claude-3-haiku</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>ARIA NAME / PERSONALITY</label>
+      <input id="cfgName" type="text" placeholder="ARIA" value="ARIA" />
+    </div>
+    <button id="saveBtn" onclick="saveSettings()">SAVE SETTINGS</button>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+let API_KEY  = localStorage.getItem('aria_key')   || '';
+let MODEL    = localStorage.getItem('aria_model')  || 'nvidia/nemotron-super-49b-v1:free';
+let ARIA_NAME= localStorage.getItem('aria_name')   || 'ARIA';
+let history  = [];
+let busy     = false;
+let listening = false;
+let wakeOn   = false;
+let wakeRec  = null;
+let wakeActive = false;
+let vizTimer = null;
+
+const WAKE_WORDS = ['hey aria','hey area','hey arya','hey ava','hey ari','aria','hey harry','hey avia','avia','hey naria','hey alria','hey ahria','hey arria','hey ar','arria','hey ara','hey aria.','hey areya','hey area','hey areia','hey iria','hey lyria'];
+
+const SYSTEM_PROMPT = () => `You are ${ARIA_NAME}, an AI voice assistant running as a native Android app with full UI control.
+Respond ONLY in JSON: {"speech": "...", "action": "..." or null, "params": {} or null}
+
+"speech" = what you say out loud.
+"action" = one of these action keys, or null:
+
+  // Device controls
+  torch_on, torch_off, torch_toggle
+  battery_info
+  open_url (params: {"url":"..."})
+  dial (params: {"number":"..."})
+  sms (params: {"number":"..."})
+  notify (params: {"title":"...","body":"..."})
+  open_settings
+  share (params: {"text":"..."})
+  device_info
+  vibrate (params: {"ms": 300})
+
+  // UI navigation (requires Accessibility permission)
+  tap (params: {"x": 540, "y": 960})
+  long_press (params: {"x": 540, "y": 960})
+  swipe (params: {"x1":540,"y1":1400,"x2":540,"y2":400,"duration":300})
+  scroll_down
+  scroll_up
+  press_back
+  press_home
+  press_recents
+  open_notifications
+  open_quick_settings
+  tap_by_text (params: {"text":"Settings"})
+  type_text (params: {"text":"hello world"})
+  read_screen
+
+For conversation with no action: {"speech": "...", "action": null, "params": null}
+
+Keep speech natural and concise. Never include text outside the JSON object.`;
+
+// ── HISTORY MANAGEMENT ──────────────────────────────────────────────────────
+function trimHistory() {
+  if (history.length > 12) history = history.slice(-8);
+}
+
+// ── AI CALL ─────────────────────────────────────────────────────────────────
+async function askAI(text) {
+  if (!API_KEY) {
+    return { speech: "Please set your OpenRouter API key in Settings.", action: null };
+  }
+  trimHistory();
+  history.push({ role: 'user', content: text });
+  setStatus('think', 'THINKING');
+
+  try {
+    const msgs = [{ role: 'system', content: SYSTEM_PROMPT() }, ...history];
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://aria-assistant.app',
+        'X-Title': 'ARIA'
+      },
+      body: JSON.stringify({ model: MODEL, messages: msgs, max_tokens: 600 })
+    });
+    if (!res.ok) {
+  const err = await res.text();
+  return { speech: `API error ${res.status}: ${err}`, action: null };
+}
+    const data = await res.json();
+    const raw  = data.choices[0].message.content.trim();
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      history.push({ role: 'assistant', content: JSON.stringify(parsed) });
+      return parsed;
+    }
+    return { speech: "I had a formatting issue. Try again.", action: null };
+  } catch (e) {
+    return { speech: "Connection failed. Check your internet.", action: null };
+  }
+}
+
+// ── ACTION HANDLER ──────────────────────────────────────────────────────────
+function handleAction(action, params) {
+  if (!action || action === 'null') return null;
+  const B = window.AndroidBridge;
+  if (!B) return '(actions require native app)';
+
+  try {
+    switch (action) {
+      case 'torch_on':     B.setTorch(true);  return 'Torch on';
+      case 'torch_off':    B.setTorch(false); return 'Torch off';
+      case 'torch_toggle': B.setTorch(!B.getTorchState()); return 'Torch toggled';
+      case 'battery_info':
+        const bi = JSON.parse(B.getBatteryInfo());
+        return `Battery: ${bi.level}% ${bi.charging ? '(charging)' : ''}`;
+      case 'open_url':
+        B.openUrl(params.url); return `Opening ${params.url}`;
+      case 'dial':
+        B.dialNumber(params.number); return `Dialling ${params.number}`;
+      case 'sms':
+        B.sendSMS(params.number); return `Messaging ${params.number}`;
+      case 'notify':
+        B.sendNotification(params.title || ARIA_NAME, params.body || ''); return 'Notification sent';
+      case 'open_settings':
+        B.openSettings(); return 'Opening settings';
+      case 'share':
+        B.shareText(params.text); return 'Share dialog opened';
+      case 'device_info':
+        return B.getDeviceInfo();
+      case 'vibrate':
+        B.vibrate(params.ms || 300); return 'Vibrated';
+
+      // ── TOUCH / UI NAVIGATION ──
+      case 'tap':
+        B.tap(params.x || 540, params.y || 960); return `Tapping (${params.x},${params.y})`;
+      case 'long_press':
+        B.longPress(params.x || 540, params.y || 960); return `Long pressing (${params.x},${params.y})`;
+      case 'swipe':
+        B.swipe(params.x1||540, params.y1||1400, params.x2||540, params.y2||400, params.duration||300);
+        return 'Swiping';
+      case 'scroll_down':
+        B.scrollDown(); return 'Scrolling down';
+      case 'scroll_up':
+        B.scrollUp(); return 'Scrolling up';
+      case 'press_back':
+        B.pressBack(); return 'Back';
+      case 'press_home':
+        B.pressHome(); return 'Home';
+      case 'press_recents':
+        B.pressRecents(); return 'Recents';
+      case 'open_notifications':
+        B.openNotifications(); return 'Notifications opened';
+      case 'open_quick_settings':
+        B.openQuickSettings(); return 'Quick settings opened';
+      case 'tap_by_text':
+        B.tapByText(params.text || ''); return `Tapping "${params.text}"`;
+      case 'type_text':
+        B.typeText(params.text || ''); return `Typing: ${params.text}`;
+      case 'read_screen':
+        const screen = JSON.parse(B.readScreen());
+        if (screen.error) return screen.error;
+        const labels = screen.items.map(i => i.text).filter(Boolean).join(', ');
+        return `Screen: ${labels || 'nothing readable'}`;
+
+      default: return null;
+    }
+  } catch (e) { return 'Action failed: ' + e.message; }
+}
+
+// ── PROCESS INPUT ────────────────────────────────────────────────────────────
+async function process(text) {
+  if (busy) return;
+  busy = true;
+  addMsg(text, 'you');
+
+  const resp   = await askAI(text);
+  const output = handleAction(resp.action, resp.params || {});
+  addMsg(resp.speech, 'aria', '', resp.action, output);
+  speak(resp.speech);
+  busy = false;
+}
+
+// ── TTS ──────────────────────────────────────────────────────────────────────
+function speak(text) {
+  setStatus('speak', 'SPEAKING');
+  if (window.AndroidBridge) {
+    AndroidBridge.speak(text);
+  } else {
+    const u = new SpeechSynthesisUtterance(text);
+    u.onend = onTTSDone;
+    speechSynthesis.speak(u);
+  }
+}
+
+function onTTSStart() { setStatus('speak', 'SPEAKING'); }
+function onTTSDone()  { setStatus('idle', 'READY'); if (wakeOn) restartWake(); }
+
+// ── STT (NATIVE ANDROID) ─────────────────────────────────────────────────────
+let sttInterimBubble = null;
+
+function startMic() {
+  if (busy) return;
+  document.getElementById('micbtn').classList.add('on');
+  vizOn(true);
+  if (window.AndroidBridge) {
+    AndroidBridge.startListening();
+  }
+  listening = true;
+  setStatus('listen', 'LISTENING');
+}
+
+function stopMic() {
+  document.getElementById('micbtn').classList.remove('on');
+  if (window.AndroidBridge && listening) AndroidBridge.stopListening();
+  listening = false;
+}
+
+// Callbacks from Android
+function onSTTReady()   { setStatus('listen', 'LISTENING'); }
+function onSTTBegin()   { sttInterimBubble = addMsg('...', 'you', 'interim'); }
+function onSTTEnd()     { vizOn(false); }
+function onSTTError(e)  { vizOn(false); setStatus('idle','READY'); sttInterimBubble = null; }
+function onSTTVolume(v) {
+  const bars = document.querySelectorAll('.vb');
+  bars.forEach((b, i) => {
+    const h = Math.max(3, Math.min(28, Math.abs(v) * 1.5 + Math.random() * 6));
+    b.style.height = h + 'px';
+  });
+}
+function onSTTPartial(text) {
+  if (sttInterimBubble) sttInterimBubble.textContent = text + '...';
+}
+function onSTTResult(text) {
+  if (sttInterimBubble) sttInterimBubble.closest('.row').remove();
+  sttInterimBubble = null;
+  vizOn(false);
+  process(text);
+}
+
+// ── WAKE WORD (Web Speech API fallback) ─────────────────────────────────────
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let wakeBuffer = '';
+
+function toggleWake() {
+  wakeOn = !wakeOn;
+  const btn = document.getElementById('waketoggle');
+  const lbl = document.getElementById('wakelabel');
+  if (wakeOn) {
+    btn.textContent = 'DISABLE WAKE'; btn.classList.add('on');
+    lbl.textContent = 'LISTENING FOR "HEY ARIA"';
+    setStatus('wake', 'WAKE ON');
+    startWake();
+  } else {
+    btn.textContent = 'ENABLE WAKE'; btn.classList.remove('on');
+    lbl.textContent = 'SAY "HEY ARIA" TO ACTIVATE';
+    stopWake();
+    setStatus('idle', 'READY');
+  }
+}
+
+function startWake() {
+  if (!SR || !wakeOn || wakeActive) return;
+  wakeActive = true;
+  wakeRec = new SR();
+  wakeRec.lang = 'en-US'; wakeRec.continuous = true;
+  wakeRec.interimResults = true; wakeRec.maxAlternatives = 3;
+  wakeRec.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++)
+      for (let a = 0; a < e.results[i].length; a++)
+        wakeBuffer += ' ' + e.results[i][a].transcript.toLowerCase();
+    if (wakeBuffer.length > 120) wakeBuffer = wakeBuffer.slice(-120);
+    if (WAKE_WORDS.some(w => wakeBuffer.includes(w))) {
+      wakeBuffer = '';
+      if (!busy) { wakeRec.stop(); startMic(); }
+    }
+  };
+  wakeRec.onerror = () => { wakeActive = false; if (wakeOn) setTimeout(startWake, 1500); };
+  wakeRec.onend   = () => { wakeActive = false; if (wakeOn && !listening) setTimeout(startWake, 200); };
+  try { wakeRec.start(); } catch(e) { wakeActive = false; }
+}
+
+function stopWake() {
+  wakeActive = false;
+  try { if (wakeRec) wakeRec.stop(); } catch(e) {}
+  wakeRec = null;
+}
+
+function restartWake() { if (wakeOn && !wakeActive) setTimeout(startWake, 500); }
+
+// ── TEXT INPUT ───────────────────────────────────────────────────────────────
+document.getElementById('tinput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const v = e.target.value.trim();
+    if (v) { process(v); e.target.value = ''; }
+  }
+});
+
+// ── VISUALIZER ───────────────────────────────────────────────────────────────
+function vizOn(on) {
+  const el = document.getElementById('viz');
+  if (on) {
+    el.classList.add('on');
+    if (!vizTimer) vizTimer = setInterval(animViz, 80);
+  } else {
+    el.classList.remove('on');
+    clearInterval(vizTimer); vizTimer = null;
+    document.querySelectorAll('.vb').forEach(b => b.style.height = '3px');
+  }
+}
+function animViz() {
+  document.querySelectorAll('.vb').forEach(b => {
+    b.style.height = (Math.random() * 22 + 4) + 'px';
+  });
+}
+
+// ── STATUS ───────────────────────────────────────────────────────────────────
+function setStatus(mode, label) {
+  const dot = document.getElementById('sdot');
+  const txt = document.getElementById('stxt');
+  dot.className = mode; txt.textContent = label;
+  document.getElementById('hsub').textContent = 'AI ASSISTANT // ' + label;
+}
+
+// ── MESSAGES ─────────────────────────────────────────────────────────────────
+function addMsg(text, side, cls='', action=null, output=null) {
+  const row = document.createElement('div'); row.className = 'row ' + side;
+  const b   = document.createElement('div'); b.className   = 'bub ' + cls;
+  b.textContent = text;
+  if (action) {
+    const c = document.createElement('span'); c.className = 'cmd';
+    c.textContent = '⚡ ' + action; b.appendChild(c);
+  }
+  if (output) {
+    const o = document.createElement('span'); o.className = 'out';
+    o.textContent = output; b.appendChild(o);
+  }
+  row.appendChild(b);
+  document.getElementById('chat').appendChild(row);
+  document.getElementById('chat').scrollTop = 99999;
+  return b;
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('cfgKey').value   = API_KEY;
+  document.getElementById('cfgModel').value = MODEL;
+  document.getElementById('cfgName').value  = ARIA_NAME;
+  document.getElementById('modal').classList.add('open');
+}
+function closeSettings(e) {
+  if (!e || e.target === document.getElementById('modal') || e.target.id === 'closeModal')
+    document.getElementById('modal').classList.remove('open');
+}
+function saveSettings() {
+  API_KEY   = document.getElementById('cfgKey').value.trim();
+  MODEL     = document.getElementById('cfgModel').value;
+  ARIA_NAME = document.getElementById('cfgName').value.trim() || 'ARIA';
+  localStorage.setItem('aria_key',   API_KEY);
+  localStorage.setItem('aria_model', MODEL);
+  localStorage.setItem('aria_name',  ARIA_NAME);
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('hname').textContent = ARIA_NAME.split('').join(' ');
+  if (window.AndroidBridge) AndroidBridge.toast('Settings saved!');
+}
+
+// ── TOUCH PANEL ──────────────────────────────────────────────────────────────
+let touchPanelOpen = false;
+
+function toggleTouchPanel() {
+  touchPanelOpen = !touchPanelOpen;
+  document.getElementById('touchPanel').classList.toggle('open', touchPanelOpen);
+  document.getElementById('touchToggle').classList.toggle('on', touchPanelOpen);
+  if (touchPanelOpen) checkA11y();
+}
+
+function checkA11y() {
+  const enabled = window.AndroidBridge && AndroidBridge.isAccessibilityEnabled();
+  document.getElementById('a11yBanner').classList.toggle('show', !enabled);
+}
+
+function doTouch(action, params = {}) {
+  const B = window.AndroidBridge;
+  if (!B) { addMsg('Touch requires native app', 'aria'); return; }
+  if (!B.isAccessibilityEnabled()) {
+    addMsg('Enable ARIA in Accessibility Settings first — tap the ⚠ banner above.', 'aria');
+    return;
+  }
+  const result = handleAction(action, params);
+  if (result) addMsg(result, 'aria');
+}
+
+// Callback from Android when a touch gesture completes
+function onTouchResult(result) {
+  // Show subtle feedback in chat for non-trivial results
+  if (result && result !== 'tapped' && !result.startsWith('tapping')) {
+    addMsg('✋ ' + result, 'aria');
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  document.getElementById('hname').textContent = ARIA_NAME.split('').join(' ');
+  if (!API_KEY) {
+    setTimeout(() => addMsg("Welcome! Tap ⚙️ to add your OpenRouter API key to get started.", 'aria'), 600);
+  } else {
+    setTimeout(() => addMsg(`${ARIA_NAME} online. Touch control ready — tap ✋ to expand the control pad.`, 'aria'), 400);
+  }
+  // Check accessibility on load
+  setTimeout(checkA11y, 800);
+});
+</script>
+</body>
+</html>
