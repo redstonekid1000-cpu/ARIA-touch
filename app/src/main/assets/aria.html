@@ -602,9 +602,10 @@ function agentDelay(ms) {
 }
 
 function getScreenContext() {
-  if (!B) return 'no accessibility';
+  const Bridge = window.AndroidBridge;
+  if (!Bridge) return 'no accessibility';
   try {
-    const ui = JSON.parse(B.scanUI());
+    const ui = JSON.parse(Bridge.scanUI());
     if (ui.error) return 'screen unavailable';
     const btns = (ui.buttons || []).slice(0, 15).map(b => '[' + b.index + ']"' + b.text + '"@(' + b.x + ',' + b.y + ')').join(' ');
     const inps = (ui.inputs || []).slice(0, 10).map(i => '[' + i.index + ']INPUT:"' + i.text + '"@(' + i.x + ',' + i.y + ')').join(' ');
@@ -884,9 +885,9 @@ function checkA11y() {
 }
 
 function doTouch(action, params = {}) {
-  const B = window.AndroidBridge;
-  if (!B) { addMsg('Touch requires native app', 'aria'); return; }
-  if (!B.isAccessibilityEnabled()) {
+  const B2 = window.AndroidBridge;
+  if (!B2) { addMsg('Touch requires native app', 'aria'); return; }
+  if (B2.isAccessibilityEnabled && !B2.isAccessibilityEnabled()) {
     addMsg('Enable ARIA in Accessibility Settings first — tap the ⚠ banner above.', 'aria');
     return;
   }
