@@ -457,7 +457,7 @@ async function askAI(text) {
         'HTTP-Referer': 'https://aria-assistant.app',
         'X-Title': 'ARIA'
       },
-      body: JSON.stringify({ model: MODEL, messages: msgs, max_tokens: 600 })
+      body: JSON.stringify({ model: MODEL, messages: msgs, max_tokens: 4096 })
     });
     if (!res.ok) {
   const err = await res.text();
