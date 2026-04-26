@@ -332,6 +332,7 @@ body::before {
       <div class="tb" onclick="doTouch('scroll_down')"><span class="ti">↓</span>SCROLL DN</div>
       <div class="tb" onclick="doTouch('open_quick_settings')"><span class="ti">⚙</span>QUICK SET</div>
       <div class="tb" onclick="doTouch('read_screen')"><span class="ti">👁</span>READ SCR</div>
+      <div class="tb" onclick="doTouch('scan_ui')"><span class="ti">🔍</span>SCAN UI</div>
     </div>
   </div>
 
@@ -420,6 +421,13 @@ Respond ONLY in JSON: {"speech": "...", "action": "..." or null, "params": {} or
   tap_by_text (params: {"text":"Settings"})
   type_text (params: {"text":"hello world"})
   read_screen
+  scan_ui — scans screen and returns all buttons/inputs with index numbers and (x,y) positions
+  find_element (params: {"query":"email"}) — finds a button or field by label/hint text
+  fill_field (params: {"field":"Email","value":"user@example.com"}) — taps a field and types into it
+  tap_by_index (params: {"index":3}) — taps element by its index from scan_ui
+
+To fill a form: first use scan_ui or find_element to locate fields, then use fill_field for each one.
+Example: fill_field {"field":"First name","value":"John"} then fill_field {"field":"Last name","value":"Doe"}
 
 For conversation with no action: {"speech": "...", "action": null, "params": null}
 
@@ -526,11 +534,30 @@ function handleAction(action, params) {
         B.tapByText(params.text || ''); return `Tapping "${params.text}"`;
       case 'type_text':
         B.typeText(params.text || ''); return `Typing: ${params.text}`;
-      case 'read_screen':
+      case 'read_screen': {
         const screen = JSON.parse(B.readScreen());
         if (screen.error) return screen.error;
         const labels = screen.items.map(i => i.text).filter(Boolean).join(', ');
         return `Screen: ${labels || 'nothing readable'}`;
+      }
+      case 'scan_ui': {
+        const ui = JSON.parse(B.scanUI());
+        if (ui.error) return ui.error;
+        const btnList = ui.buttons.map(b => `[${b.index}] "${b.text}" @(${b.x},${b.y})`).join('\n');
+        const inpList = ui.inputs.map(i => `[${i.index}] INPUT "${i.text}" @(${i.x},${i.y})`).join('\n');
+        return `Buttons:\n${btnList || 'none'}\n\nInputs:\n${inpList || 'none'}`;
+      }
+      case 'find_element': {
+        const el = JSON.parse(B.findElement(params.query || ''));
+        if (!el.found) return `Element not found: "${params.query}"`;
+        return `Found "${el.text}" at (${el.x}, ${el.y}) — ${el.editable ? 'input field' : 'button'}`;
+      }
+      case 'fill_field':
+        B.fillField(params.field || '', params.value || '');
+        return `Filling "${params.field}" with "${params.value}"`;
+      case 'tap_by_index':
+        B.tapByIndex(parseInt(params.index) || 0);
+        return `Tapping element #${params.index}`;
 
       default: return null;
     }

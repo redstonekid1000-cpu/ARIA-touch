@@ -252,22 +252,239 @@ public class ARIAAccessibilityService extends AccessibilityService {
         try {
             CharSequence text = node.getText();
             CharSequence desc = node.getContentDescription();
+            CharSequence hint = node.getHintText();
             String label = text != null ? text.toString().trim()
-                         : desc != null ? desc.toString().trim() : "";
+                         : desc != null ? desc.toString().trim()
+                         : hint != null ? hint.toString().trim() : "";
             if (!label.isEmpty()) {
                 JSONObject item = new JSONObject();
                 item.put("text", label);
                 item.put("clickable", node.isClickable());
                 item.put("editable", node.isEditable());
+                item.put("checkable", node.isCheckable());
+                item.put("checked", node.isChecked());
+                item.put("className", node.getClassName() != null ? node.getClassName().toString() : "");
                 Rect r = new Rect();
                 node.getBoundsInScreen(r);
                 item.put("x", r.centerX());
                 item.put("y", r.centerY());
+                item.put("width", r.width());
+                item.put("height", r.height());
                 out.put(item);
             }
         } catch (Exception ignored) {}
         for (int i = 0; i < node.getChildCount(); i++) {
             collectText(node.getChild(i), out, depth + 1);
         }
+    }
+
+    // ── SCAN UI ──────────────────────────────────────────────────────────────
+    // Returns ALL interactive elements: buttons, inputs, checkboxes, etc.
+    public String scanUI() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return "{\"error\":\"no active window\"}";
+
+        JSONArray buttons = new JSONArray();
+        JSONArray inputs = new JSONArray();
+        JSONArray all = new JSONArray();
+        int[] index = {0};
+
+        scanNode(root, buttons, inputs, all, index, 0);
+
+        try {
+            JSONObject result = new JSONObject();
+            result.put("buttons", buttons);
+            result.put("inputs", inputs);
+            result.put("all", all);
+            result.put("buttonCount", buttons.length());
+            result.put("inputCount", inputs.length());
+            return result.toString();
+        } catch (Exception e) {
+            return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    private void scanNode(AccessibilityNodeInfo node, JSONArray buttons, JSONArray inputs,
+                          JSONArray all, int[] index, int depth) {
+        if (node == null || depth > 15) return;
+        try {
+            CharSequence text = node.getText();
+            CharSequence desc = node.getContentDescription();
+            CharSequence hint = node.getHintText();
+            String className = node.getClassName() != null ? node.getClassName().toString() : "";
+
+            String label = text != null ? text.toString().trim()
+                         : desc != null ? desc.toString().trim()
+                         : hint != null ? "[hint: " + hint.toString().trim() + "]" : "";
+
+            boolean isEditable = node.isEditable();
+            boolean isClickable = node.isClickable();
+            boolean isCheckable = node.isCheckable();
+
+            if (isEditable || isClickable || isCheckable) {
+                Rect r = new Rect();
+                node.getBoundsInScreen(r);
+                if (r.width() > 0 && r.height() > 0) {
+                    JSONObject item = new JSONObject();
+                    item.put("index", index[0]);
+                    item.put("text", label.isEmpty() ? "(no label)" : label);
+                    item.put("x", r.centerX());
+                    item.put("y", r.centerY());
+                    item.put("width", r.width());
+                    item.put("height", r.height());
+                    item.put("editable", isEditable);
+                    item.put("clickable", isClickable);
+                    item.put("checkable", isCheckable);
+                    item.put("checked", node.isChecked());
+                    item.put("class", className);
+
+                    all.put(item);
+                    if (isEditable) inputs.put(item);
+                    else if (isClickable || isCheckable) buttons.put(item);
+                    index[0]++;
+                }
+            }
+        } catch (Exception ignored) {}
+        for (int i = 0; i < node.getChildCount(); i++) {
+            scanNode(node.getChild(i), buttons, inputs, all, index, depth + 1);
+        }
+    }
+
+    // ── FIND BUTTON / INPUT BY LABEL ─────────────────────────────────────────
+    // Returns JSON with x,y of the best matching element
+    public String findElement(String query) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return "{\"error\":\"no active window\"}";
+
+        String q = query.toLowerCase().trim();
+        AccessibilityNodeInfo best = findBestMatch(root, q, 0);
+
+        if (best != null) {
+            try {
+                Rect r = new Rect();
+                best.getBoundsInScreen(r);
+                JSONObject result = new JSONObject();
+                result.put("found", true);
+                result.put("x", r.centerX());
+                result.put("y", r.centerY());
+                CharSequence t = best.getText();
+                CharSequence d = best.getContentDescription();
+                result.put("text", t != null ? t.toString() : d != null ? d.toString() : "");
+                result.put("editable", best.isEditable());
+                result.put("clickable", best.isClickable());
+                return result.toString();
+            } catch (Exception e) {
+                return "{\"error\":\"" + e.getMessage() + "\"}";
+            }
+        }
+        return "{\"found\":false,\"query\":\"" + query + "\"}";
+    }
+
+    private AccessibilityNodeInfo findBestMatch(AccessibilityNodeInfo node, String query, int depth) {
+        if (node == null || depth > 15) return null;
+        try {
+            CharSequence text = node.getText();
+            CharSequence desc = node.getContentDescription();
+            CharSequence hint = node.getHintText();
+            String t = text != null ? text.toString().toLowerCase() : "";
+            String d = desc != null ? desc.toString().toLowerCase() : "";
+            String h = hint != null ? hint.toString().toLowerCase() : "";
+
+            if ((t.contains(query) || d.contains(query) || h.contains(query))
+                    && (node.isClickable() || node.isEditable())) {
+                return node;
+            }
+        } catch (Exception ignored) {}
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo result = findBestMatch(node.getChild(i), query, depth + 1);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    // ── FILL FORM FIELD ──────────────────────────────────────────────────────
+    // Tap a field by label, then type text into it
+    public void fillField(String fieldLabel, String value, ActionCallback cb) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            if (cb != null) cb.onResult("no active window");
+            return;
+        }
+
+        String q = fieldLabel.toLowerCase().trim();
+        AccessibilityNodeInfo field = findBestMatch(root, q, 0);
+
+        if (field == null) {
+            if (cb != null) cb.onResult("field not found: " + fieldLabel);
+            return;
+        }
+
+        // First tap the field to focus it
+        Rect r = new Rect();
+        field.getBoundsInScreen(r);
+        float cx = r.centerX();
+        float cy = r.centerY();
+
+        tap(cx, cy, result -> {
+            // Short delay then type
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                // Clear existing text first, then type
+                AccessibilityNodeInfo focused = getRootInActiveWindow() != null
+                        ? findEditableNode(getRootInActiveWindow()) : null;
+                if (focused != null) {
+                    // Clear field
+                    Bundle clearArgs = new Bundle();
+                    clearArgs.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "");
+                    focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs);
+                    // Set value
+                    Bundle args = new Bundle();
+                    args.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value);
+                    boolean ok = focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+                    if (cb != null) cb.onResult(ok ? "filled \"" + fieldLabel + "\" with \"" + value + "\"" : "fill failed");
+                } else {
+                    if (cb != null) cb.onResult("could not focus field: " + fieldLabel);
+                }
+            }, 300);
+        });
+    }
+
+    // ── TAP BY INDEX ─────────────────────────────────────────────────────────
+    // After scanUI(), tap element by its index number
+    public void tapByIndex(int targetIndex, ActionCallback cb) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            if (cb != null) cb.onResult("no active window");
+            return;
+        }
+        int[] index = {0};
+        AccessibilityNodeInfo found = findByIndex(root, targetIndex, index, 0);
+        if (found != null) {
+            Rect r = new Rect();
+            found.getBoundsInScreen(r);
+            tap(r.centerX(), r.centerY(), cb);
+        } else {
+            if (cb != null) cb.onResult("index not found: " + targetIndex);
+        }
+    }
+
+    private AccessibilityNodeInfo findByIndex(AccessibilityNodeInfo node, int target,
+                                               int[] current, int depth) {
+        if (node == null || depth > 15) return null;
+        try {
+            boolean isInteractive = node.isClickable() || node.isEditable() || node.isCheckable();
+            Rect r = new Rect();
+            node.getBoundsInScreen(r);
+            if (isInteractive && r.width() > 0) {
+                if (current[0] == target) return node;
+                current[0]++;
+            }
+        } catch (Exception ignored) {}
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo result = findByIndex(node.getChild(i), target, current, depth + 1);
+            if (result != null) return result;
+        }
+        return null;
     }
 }

@@ -521,6 +521,46 @@ public class MainActivity extends AppCompatActivity {
             }
             return ARIAAccessibilityService.instance.readScreen();
         }
+
+        // Returns all buttons, inputs, checkboxes with positions and index numbers
+        @android.webkit.JavascriptInterface
+        public String scanUI() {
+            if (ARIAAccessibilityService.instance == null) {
+                return "{\"error\":\"Accessibility service not enabled\"}";
+            }
+            return ARIAAccessibilityService.instance.scanUI();
+        }
+
+        // Find an element by label/hint text — returns {found, x, y, editable, clickable}
+        @android.webkit.JavascriptInterface
+        public String findElement(String query) {
+            if (ARIAAccessibilityService.instance == null) {
+                return "{\"error\":\"Accessibility service not enabled\"}";
+            }
+            return ARIAAccessibilityService.instance.findElement(query);
+        }
+
+        // Tap a field by label then type a value into it
+        @android.webkit.JavascriptInterface
+        public void fillField(String fieldLabel, String value) {
+            if (ARIAAccessibilityService.instance == null) {
+                callJS("onActionResult(\'Accessibility service not enabled\')");
+                return;
+            }
+            ARIAAccessibilityService.instance.fillField(fieldLabel, value,
+                result -> callJS("onActionResult(\'" + result.replace("\'", "\\\'") + "\')"));
+        }
+
+        // Tap element by its index from scanUI()
+        @android.webkit.JavascriptInterface
+        public void tapByIndex(int index) {
+            if (ARIAAccessibilityService.instance == null) {
+                callJS("onActionResult(\'Accessibility service not enabled\')");
+                return;
+            }
+            ARIAAccessibilityService.instance.tapByIndex(index,
+                result -> callJS("onActionResult(\'" + result.replace("\'", "\\\'") + "\')"));
+        }
     }
 
     // ─── HELPERS ─────────────────────────────────────────────────────────────
